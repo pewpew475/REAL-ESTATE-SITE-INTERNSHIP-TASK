@@ -28,12 +28,12 @@ export const PropertyFilters = ({ onFilterChange }: PropertyFiltersProps) => {
     propertyType: '',
     location: '',
     minPrice: 0,
-    maxPrice: 2000000,
+    maxPrice: 10000000,
     bedrooms: '',
     bathrooms: '',
   });
 
-  const [priceRange, setPriceRange] = useState([0, 2000000]);
+  const [priceRange, setPriceRange] = useState([0, 10000000]);
 
   const handleFilterChange = (key: keyof FilterState, value: string | number) => {
     const newFilters = { ...filters, [key]: value };
@@ -54,12 +54,12 @@ export const PropertyFilters = ({ onFilterChange }: PropertyFiltersProps) => {
       propertyType: '',
       location: '',
       minPrice: 0,
-      maxPrice: 2000000,
+      maxPrice: 10000000,
       bedrooms: '',
       bathrooms: '',
     };
     setFilters(clearedFilters);
-    setPriceRange([0, 2000000]);
+    setPriceRange([0, 10000000]);
     onFilterChange(clearedFilters);
   };
 
@@ -179,7 +179,7 @@ export const PropertyFilters = ({ onFilterChange }: PropertyFiltersProps) => {
             <Slider
               value={priceRange}
               onValueChange={handlePriceChange}
-              max={2000000}
+              max={10000000}
               min={0}
               step={25000}
               className="w-full"

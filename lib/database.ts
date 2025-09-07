@@ -88,7 +88,7 @@ class Database {
         propertyType,
         location,
         minPrice = 0,
-        maxPrice = 2000000,
+        maxPrice = Number.MAX_SAFE_INTEGER,
         bedrooms,
         bathrooms
       } = filters;

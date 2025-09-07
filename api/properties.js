@@ -1,56 +1,7 @@
-const { database } = require('../lib/database.js');
-const { get } = require('@vercel/edge-config');
+import { database } from '../lib/database.js';
+import { createClient } from '@supabase/supabase-js';
 
-// Admin write helper for Edge Config (REST API)
-async function writePropertiesToEdgeConfig(properties) {
-  const edgeConfigId = process.env.EDGE_CONFIG_ID;
-  const edgeConfigToken = process.env.EDGE_CONFIG_TOKEN;
-  const teamId = process.env.EDGE_CONFIG_TEAM_ID; // optional
-
-  if (!edgeConfigId || !edgeConfigToken) {
-    throw new Error('EDGE_CONFIG_ID and EDGE_CONFIG_TOKEN are required for writes');
-  }
-
-  const url = new URL(`https://api.vercel.com/v1/edge-config/${edgeConfigId}/items`);
-  if (teamId) url.searchParams.set('teamId', teamId);
-
-  const body = {
-    items: [
-      {
-        operation: 'upsert',
-        key: 'properties',
-        value: properties,
-      },
-    ],
-  };
-
-  const response = await fetch(url.toString(), {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${edgeConfigToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    throw new Error(`Edge Config write failed (${response.status}): ${errText}`);
-  }
-}
-
-async function readPropertiesFromEdgeConfig() {
-  try {
-    const list = await get('properties');
-    if (Array.isArray(list)) return list;
-    return null;
-  } catch (e) {
-    console.warn('Edge Config read failed, falling back:', e?.message || e);
-    return null;
-  }
-}
-
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   // Handle CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -70,41 +21,33 @@ module.exports = async (req, res) => {
       const propertyType = searchParams.get('type') || '';
       const location = searchParams.get('location') || '';
       const minPrice = parseInt(searchParams.get('minPrice') || '0');
-      const maxPrice = parseInt(searchParams.get('maxPrice') || '2000000');
+      const maxPrice = parseInt(searchParams.get('maxPrice') || `${Number.MAX_SAFE_INTEGER}`);
       const bedrooms = searchParams.get('bedrooms') || '';
       const bathrooms = searchParams.get('bathrooms') || '';
 
-      // Prefer Edge Config; fall back to in-memory database if unavailable
-      const edgeList = await readPropertiesFromEdgeConfig();
-      const sourceList = Array.isArray(edgeList) && edgeList.length > 0
-        ? edgeList
-        : database.getProperties();
+      // Supabase fetch with filters
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
+      let query = supabase
+        .from('properties')
+        .select('*')
+        .gte('price', minPrice)
+        .lte('price', maxPrice);
 
-      // Apply filters (replicating database.getProperties behavior)
-      const filteredProperties = database.getProperties({
-        searchQuery,
-        propertyType,
-        location,
-        minPrice,
-        maxPrice,
-        bedrooms,
-        bathrooms
-      });
+      if (searchQuery) {
+        query = query.or(`name.ilike.%${searchQuery}%,location.ilike.%${searchQuery}%`);
+      }
+      if (propertyType) query = query.eq('type', propertyType);
+      if (location) query = query.ilike('location', `%${location}%`);
+      if (bedrooms) query = query.gte('bedrooms', parseInt(bedrooms));
+      if (bathrooms) query = query.gte('bathrooms', parseInt(bathrooms));
 
-      // If we used Edge Config, re-filter against that list
-      const finalList = (Array.isArray(edgeList) && edgeList.length > 0)
-        ? sourceList.filter((property) => {
-            const matchesSearch = !searchQuery ||
-              property.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              property.location.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesType = !propertyType || property.type === propertyType;
-            const matchesLocation = !location || property.location.toLowerCase().includes(location.toLowerCase());
-            const matchesPrice = property.price >= minPrice && property.price <= maxPrice;
-            const matchesBedrooms = !bedrooms || property.bedrooms >= parseInt(bedrooms);
-            const matchesBathrooms = !bathrooms || property.bathrooms >= parseInt(bathrooms);
-            return matchesSearch && matchesType && matchesLocation && matchesPrice && matchesBedrooms && matchesBathrooms;
-          })
-        : filteredProperties;
+      const { data: rows, error } = await query.order('createdAt', { ascending: false });
+      if (error) throw error;
+
+      const finalList = (rows || []).map(row => ({
+        ...row,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date()
+      }));
 
       return res.json({
         success: true,
@@ -161,16 +104,41 @@ module.exports = async (req, res) => {
         createdAt: new Date()
       };
 
-      // Read current properties from Edge Config (fallback to in-memory seed)
-      const current = (await readPropertiesFromEdgeConfig()) || database.getProperties();
-      const updated = [newProperty, ...current];
+      // Insert into Supabase
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
+      const { data, error } = await supabase
+        .from('properties')
+        .insert({
+          id: newProperty.id,
+          name: newProperty.name,
+          type: newProperty.type,
+          price: newProperty.price,
+          location: newProperty.location,
+          address: newProperty.address,
+          pincode: newProperty.pincode,
+          bedrooms: newProperty.bedrooms,
+          bathrooms: newProperty.bathrooms,
+          squareFootage: newProperty.squareFootage,
+          description: newProperty.description,
+          images: newProperty.images,
+          amenities: newProperty.amenities,
+          contactName: newProperty.contactName,
+          contactPhone: newProperty.contactPhone,
+          contactEmail: newProperty.contactEmail,
+          yearBuilt: newProperty.yearBuilt ?? null,
+          parking: newProperty.parking ?? null,
+          furnished: newProperty.furnished ?? null,
+          petFriendly: newProperty.petFriendly ?? null,
+          createdAt: new Date().toISOString()
+        })
+        .select()
+        .single();
 
-      // Write back to Edge Config
-      await writePropertiesToEdgeConfig(updated);
+      if (error) throw error;
 
       return res.status(201).json({
         success: true,
-        data: newProperty,
+        data: data,
         message: 'Property created successfully'
       });
     } catch (error) {

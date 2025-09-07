@@ -20,7 +20,7 @@ const Index = () => {
     propertyType: '',
     location: '',
     minPrice: 0,
-    maxPrice: 2000000,
+    maxPrice: 10000000,
     bedrooms: '',
     bathrooms: '',
   });
