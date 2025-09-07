@@ -1,4 +1,3 @@
-import { database } from '../lib/database.js';
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
@@ -26,7 +25,12 @@ export default async function handler(req, res) {
       const bathrooms = searchParams.get('bathrooms') || '';
 
       // Supabase fetch with filters
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE env vars');
+      }
+      const supabase = createClient(supabaseUrl, supabaseKey);
       let query = supabase
         .from('properties')
         .select('*')
@@ -105,7 +109,12 @@ export default async function handler(req, res) {
       };
 
       // Insert into Supabase
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE env vars');
+      }
+      const supabase = createClient(supabaseUrl, supabaseKey);
       const { data, error } = await supabase
         .from('properties')
         .insert({
