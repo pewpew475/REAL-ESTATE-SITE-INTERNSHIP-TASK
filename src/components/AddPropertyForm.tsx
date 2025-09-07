@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, Upload, Plus, MapPin, Home, DollarSign } from "lucide-react";
+import { useState, useRef } from "react";
+import { X, Upload, Plus, MapPin, Home, DollarSign, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,8 +18,10 @@ interface AddPropertyFormProps {
 
 export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormProps) => {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<string[]>([]);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -46,9 +48,73 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
   };
 
   const handleImageAdd = () => {
-    // In a real app, this would open a file picker
-    const imageUrl = `https://picsum.photos/800/600?random=${Date.now()}`;
-    setImages(prev => [...prev, imageUrl]);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select a JPEG, PNG, or WebP image.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast({
+        title: "File too large",
+        description: "Please select an image smaller than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setImages(prev => [...prev, result.data.url]);
+        toast({
+          title: "Image uploaded successfully!",
+          description: "Your image has been uploaded to the cloud.",
+        });
+      } else {
+        throw new Error(result.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload image. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleImageRemove = (index: number) => {
@@ -329,14 +395,30 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
               <button
                 type="button"
                 onClick={handleImageAdd}
-                className="w-full h-24 border-2 border-dashed border-muted-foreground/25 rounded-lg flex items-center justify-center hover:border-primary transition-colors"
+                disabled={isUploading}
+                className="w-full h-24 border-2 border-dashed border-muted-foreground/25 rounded-lg flex items-center justify-center hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="text-center">
-                  <Plus className="h-6 w-6 mx-auto mb-1 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Add Image</span>
+                  {isUploading ? (
+                    <Loader2 className="h-6 w-6 mx-auto mb-1 text-muted-foreground animate-spin" />
+                  ) : (
+                    <Plus className="h-6 w-6 mx-auto mb-1 text-muted-foreground" />
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    {isUploading ? 'Uploading...' : 'Add Image'}
+                  </span>
                 </div>
               </button>
             </div>
+            
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
           </div>
 
           {/* Amenities */}
