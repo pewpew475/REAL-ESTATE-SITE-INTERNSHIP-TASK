@@ -2,7 +2,6 @@
   "name": "api",
   "version": "1.0.0",
   "dependencies": {
-    "@vercel/blob": "^1.1.1",
-    "formidable": "^3.5.1"
+    "@vercel/blob": "^1.1.1"
   }
 }
