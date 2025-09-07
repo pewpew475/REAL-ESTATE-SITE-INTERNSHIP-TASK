@@ -22,8 +22,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "env": {
-    "BLOB_READ_WRITE_TOKEN": "@BLOB_READ_WRITE_TOKEN"
-  }
+  ]
 }
