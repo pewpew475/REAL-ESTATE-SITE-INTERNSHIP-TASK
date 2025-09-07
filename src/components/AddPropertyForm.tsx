@@ -82,24 +82,35 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
     setIsUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setImages(prev => [...prev, result.data.url]);
+      // For development, create a local object URL
+      if (import.meta.env.DEV) {
+        const objectUrl = URL.createObjectURL(file);
+        setImages(prev => [...prev, objectUrl]);
         toast({
-          title: "Image uploaded successfully!",
-          description: "Your image has been uploaded to the cloud.",
+          title: "Image added successfully!",
+          description: "Image added to your property (development mode).",
         });
       } else {
-        throw new Error(result.error || 'Upload failed');
+        // For production, upload to Vercel Blob
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          setImages(prev => [...prev, result.data.url]);
+          toast({
+            title: "Image uploaded successfully!",
+            description: "Your image has been uploaded to the cloud.",
+          });
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
