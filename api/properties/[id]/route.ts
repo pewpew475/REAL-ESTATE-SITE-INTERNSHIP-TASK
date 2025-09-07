@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { database } from '@/lib/database';
-import { Property } from '@/types/property';
+import { database } from '../../../lib/database';
+import { Property } from '../../../src/types/property';
 
 // GET /api/properties/[id] - Get a specific property by ID
 export async function GET(
