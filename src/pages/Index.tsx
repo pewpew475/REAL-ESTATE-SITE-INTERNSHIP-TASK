@@ -7,11 +7,13 @@ import { PropertyCard } from "@/components/PropertyCard";
 import { AddPropertyForm } from "@/components/AddPropertyForm";
 import { PropertyDetailsModal } from "@/components/PropertyDetailsModal";
 import { Property } from "@/types/property";
-import { mockProperties } from "@/data/mockProperties";
 import { propertiesApi } from "@/services/api";
+import { PropertyGridSkeleton } from "@/components/PropertySkeleton";
 
 const Index = () => {
-  const [properties, setProperties] = useState<Property[]>(mockProperties);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -26,8 +28,9 @@ const Index = () => {
   });
 
   // Fetch and keep properties in sync with API
-  const fetchAndSetProperties = useCallback(async () => {
+  const fetchAndSetProperties = useCallback(async (isInitial = false) => {
     try {
+      if (!isInitial) setIsFetching(true);
       const response = await propertiesApi.getAll({
         searchQuery: filters.searchQuery,
         propertyType: filters.propertyType,
@@ -41,20 +44,23 @@ const Index = () => {
       if (response.success && response.data) {
         setProperties(response.data);
       }
+      if (isInitial) setIsInitialLoading(false);
     } catch (err) {
       // Silently ignore to avoid UX disruption; local state remains
+      if (isInitial) setIsInitialLoading(false);
     }
+    if (!isInitial) setIsFetching(false);
   }, [filters]);
 
   useEffect(() => {
     // Initial fetch
-    fetchAndSetProperties();
+    fetchAndSetProperties(true);
 
     // Poll every 15s
-    const intervalId = window.setInterval(fetchAndSetProperties, 15000);
+    const intervalId = window.setInterval(() => fetchAndSetProperties(false), 15000);
 
     // Refetch on window focus
-    const onFocus = () => fetchAndSetProperties();
+    const onFocus = () => fetchAndSetProperties(false);
     window.addEventListener('focus', onFocus);
 
     return () => {
@@ -189,7 +195,9 @@ const Index = () => {
         </div>
 
         {/* Property Grid */}
-        {filteredProperties.length === 0 ? (
+        {isInitialLoading ? (
+          <PropertyGridSkeleton count={8} />
+        ) : filteredProperties.length === 0 ? (
           <div className="text-center py-12">
             <Home className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-muted-foreground mb-2">
@@ -207,14 +215,24 @@ const Index = () => {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProperties.map((property) => (
-              <PropertyCard
-                key={property.id}
-                property={property}
-                onViewDetails={handleViewDetails}
-              />
-            ))}
+          <div className="relative">
+            {isFetching && (
+              <div className="absolute top-0 left-0 right-0 z-10 bg-background/80 backdrop-blur-sm rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <span className="ml-2 text-sm text-muted-foreground">Updating properties...</span>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredProperties.map((property) => (
+                <PropertyCard
+                  key={property.id}
+                  property={property}
+                  onViewDetails={handleViewDetails}
+                />
+              ))}
+            </div>
           </div>
         )}
       </main>
