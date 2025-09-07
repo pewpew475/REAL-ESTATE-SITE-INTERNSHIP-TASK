@@ -33,32 +33,70 @@ module.exports = async (req, res) => {
         });
       }
 
-      // Get the raw body from the request
-      const chunks = [];
-      req.on('data', chunk => chunks.push(chunk));
+      // Parse the request body to get the file data
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
       
       await new Promise((resolve, reject) => {
         req.on('end', resolve);
         req.on('error', reject);
       });
-      
-      const body = Buffer.concat(chunks);
-      
-      // For now, let's return a working response
-      // The actual file upload will be implemented once we have the basic API working
+
+      // Try to parse as JSON first (in case frontend sends base64)
+      let fileData;
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed.file && parsed.fileName && parsed.fileType) {
+          fileData = parsed;
+        }
+      } catch (e) {
+        // If not JSON, it might be multipart form data
+        // For now, let's handle the case where we get the file data
+      }
+
+      if (!fileData) {
+        // If we can't parse the file data, return an error
+        return res.status(400).json({
+          success: false,
+          error: 'No file data received'
+        });
+      }
+
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(fileData.fileType)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed.'
+        });
+      }
+
+      // Generate unique filename
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 15);
-      const fileName = `property-${timestamp}-${randomString}.jpg`;
+      const fileExtension = fileData.fileName.split('.').pop();
+      const fileName = `property-${timestamp}-${randomString}.${fileExtension}`;
+
+      // Convert base64 to buffer
+      const fileBuffer = Buffer.from(fileData.file, 'base64');
+
+      // Upload to Vercel Blob
+      const blob = await put(fileName, fileBuffer, {
+        access: 'public',
+        contentType: fileData.fileType,
+      });
 
       return res.json({
         success: true,
         data: {
-          url: `https://picsum.photos/800/600?random=${timestamp}`,
+          url: blob.url,
           filename: fileName,
-          size: body.length || 1024,
-          type: 'image/jpeg'
+          size: fileBuffer.length,
+          type: fileData.fileType
         },
-        message: 'File uploaded successfully (API working - ready for real upload)'
+        message: 'File uploaded successfully'
       });
     } catch (error) {
       console.error('Error uploading file:', error);

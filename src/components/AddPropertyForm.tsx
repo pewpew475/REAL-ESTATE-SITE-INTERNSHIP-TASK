@@ -82,45 +82,71 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
     setIsUploading(true);
 
     try {
-      // For development, create a local object URL
-      if (import.meta.env.DEV) {
-        const objectUrl = URL.createObjectURL(file);
-        setImages(prev => [...prev, objectUrl]);
-        toast({
-          title: "Image added successfully!",
-          description: "Image added to your property (development mode).",
-        });
-      } else {
-        // For production, upload to Vercel Blob
-        const formData = new FormData();
-        formData.append('file', file);
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const base64String = e.target?.result as string;
+          const base64Data = base64String.split(',')[1]; // Remove data:image/...;base64, prefix
 
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          setImages(prev => [...prev, result.data.url]);
-          toast({
-            title: "Image uploaded successfully!",
-            description: "Your image has been uploaded to the cloud.",
+          // Send to API
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              file: base64Data,
+              fileName: file.name,
+              fileType: file.type,
+            }),
           });
-        } else {
-          throw new Error(result.error || 'Upload failed');
+
+          const result = await response.json();
+
+          if (result.success) {
+            setImages(prev => [...prev, result.data.url]);
+            toast({
+              title: "Image uploaded successfully!",
+              description: "Your image has been uploaded to the cloud.",
+            });
+          } else {
+            throw new Error(result.error || 'Upload failed');
+          }
+        } catch (error) {
+          console.error('Upload error:', error);
+          toast({
+            title: "Upload failed",
+            description: "Failed to upload image. Please try again.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsUploading(false);
+          // Reset file input
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
         }
-      }
+      };
+
+      reader.onerror = () => {
+        setIsUploading(false);
+        toast({
+          title: "Upload failed",
+          description: "Failed to read the file. Please try again.",
+          variant: "destructive",
+        });
+      };
+
+      reader.readAsDataURL(file);
     } catch (error) {
       console.error('Upload error:', error);
+      setIsUploading(false);
       toast({
         title: "Upload failed",
         description: "Failed to upload image. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setIsUploading(false);
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
