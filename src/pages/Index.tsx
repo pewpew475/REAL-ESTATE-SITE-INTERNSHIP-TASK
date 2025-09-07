@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Plus, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HeroSection } from "@/components/HeroSection";
@@ -8,6 +8,7 @@ import { AddPropertyForm } from "@/components/AddPropertyForm";
 import { PropertyDetailsModal } from "@/components/PropertyDetailsModal";
 import { Property } from "@/types/property";
 import { mockProperties } from "@/data/mockProperties";
+import { propertiesApi } from "@/services/api";
 
 const Index = () => {
   const [properties, setProperties] = useState<Property[]>(mockProperties);
@@ -23,6 +24,44 @@ const Index = () => {
     bedrooms: '',
     bathrooms: '',
   });
+
+  // Fetch and keep properties in sync with API
+  const fetchAndSetProperties = useCallback(async () => {
+    try {
+      const response = await propertiesApi.getAll({
+        searchQuery: filters.searchQuery,
+        propertyType: filters.propertyType,
+        location: filters.location,
+        minPrice: filters.minPrice,
+        maxPrice: filters.maxPrice,
+        bedrooms: filters.bedrooms,
+        bathrooms: filters.bathrooms,
+      });
+
+      if (response.success && response.data) {
+        setProperties(response.data);
+      }
+    } catch (err) {
+      // Silently ignore to avoid UX disruption; local state remains
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    // Initial fetch
+    fetchAndSetProperties();
+
+    // Poll every 15s
+    const intervalId = window.setInterval(fetchAndSetProperties, 15000);
+
+    // Refetch on window focus
+    const onFocus = () => fetchAndSetProperties();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [fetchAndSetProperties]);
 
   const filteredProperties = useMemo(() => {
     const filtered = properties.filter(property => {
@@ -93,6 +132,8 @@ const Index = () => {
         
         if (response.ok) {
           console.log('Property saved to API successfully');
+          // Immediately refetch to reconcile IDs and ensure global visibility
+          fetchAndSetProperties();
         } else {
           console.warn('Failed to save property to API, but it\'s still added locally');
         }

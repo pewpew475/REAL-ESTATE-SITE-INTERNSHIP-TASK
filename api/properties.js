@@ -1,4 +1,54 @@
 const { database } = require('../lib/database.js');
+const { get } = require('@vercel/edge-config');
+
+// Admin write helper for Edge Config (REST API)
+async function writePropertiesToEdgeConfig(properties) {
+  const edgeConfigId = process.env.EDGE_CONFIG_ID;
+  const edgeConfigToken = process.env.EDGE_CONFIG_TOKEN;
+  const teamId = process.env.EDGE_CONFIG_TEAM_ID; // optional
+
+  if (!edgeConfigId || !edgeConfigToken) {
+    throw new Error('EDGE_CONFIG_ID and EDGE_CONFIG_TOKEN are required for writes');
+  }
+
+  const url = new URL(`https://api.vercel.com/v1/edge-config/${edgeConfigId}/items`);
+  if (teamId) url.searchParams.set('teamId', teamId);
+
+  const body = {
+    items: [
+      {
+        operation: 'upsert',
+        key: 'properties',
+        value: properties,
+      },
+    ],
+  };
+
+  const response = await fetch(url.toString(), {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${edgeConfigToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Edge Config write failed (${response.status}): ${errText}`);
+  }
+}
+
+async function readPropertiesFromEdgeConfig() {
+  try {
+    const list = await get('properties');
+    if (Array.isArray(list)) return list;
+    return null;
+  } catch (e) {
+    console.warn('Edge Config read failed, falling back:', e?.message || e);
+    return null;
+  }
+}
 
 module.exports = async (req, res) => {
   // Handle CORS
@@ -24,7 +74,13 @@ module.exports = async (req, res) => {
       const bedrooms = searchParams.get('bedrooms') || '';
       const bathrooms = searchParams.get('bathrooms') || '';
 
-      // Get filtered properties from database
+      // Prefer Edge Config; fall back to in-memory database if unavailable
+      const edgeList = await readPropertiesFromEdgeConfig();
+      const sourceList = Array.isArray(edgeList) && edgeList.length > 0
+        ? edgeList
+        : database.getProperties();
+
+      // Apply filters (replicating database.getProperties behavior)
       const filteredProperties = database.getProperties({
         searchQuery,
         propertyType,
@@ -35,10 +91,25 @@ module.exports = async (req, res) => {
         bathrooms
       });
 
+      // If we used Edge Config, re-filter against that list
+      const finalList = (Array.isArray(edgeList) && edgeList.length > 0)
+        ? sourceList.filter((property) => {
+            const matchesSearch = !searchQuery ||
+              property.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              property.location.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesType = !propertyType || property.type === propertyType;
+            const matchesLocation = !location || property.location.toLowerCase().includes(location.toLowerCase());
+            const matchesPrice = property.price >= minPrice && property.price <= maxPrice;
+            const matchesBedrooms = !bedrooms || property.bedrooms >= parseInt(bedrooms);
+            const matchesBathrooms = !bathrooms || property.bathrooms >= parseInt(bathrooms);
+            return matchesSearch && matchesType && matchesLocation && matchesPrice && matchesBedrooms && matchesBathrooms;
+          })
+        : filteredProperties;
+
       return res.json({
         success: true,
-        data: filteredProperties,
-        count: filteredProperties.length
+        data: finalList,
+        count: finalList.length
       });
     } catch (error) {
       console.error('Error fetching properties:', error);
@@ -90,12 +161,16 @@ module.exports = async (req, res) => {
         createdAt: new Date()
       };
 
-      // Add to database
-      const createdProperty = database.createProperty(newProperty);
+      // Read current properties from Edge Config (fallback to in-memory seed)
+      const current = (await readPropertiesFromEdgeConfig()) || database.getProperties();
+      const updated = [newProperty, ...current];
+
+      // Write back to Edge Config
+      await writePropertiesToEdgeConfig(updated);
 
       return res.status(201).json({
         success: true,
-        data: createdProperty,
+        data: newProperty,
         message: 'Property created successfully'
       });
     } catch (error) {
