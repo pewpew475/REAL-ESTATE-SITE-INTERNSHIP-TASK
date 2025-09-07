@@ -9,14 +9,30 @@
       }
     },
     {
-      "src": "api/**/*.js",
+      "src": "api/upload.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/properties.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/test.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "src": "/api/upload",
+      "dest": "/api/upload.js"
+    },
+    {
+      "src": "/api/properties",
+      "dest": "/api/properties.js"
+    },
+    {
+      "src": "/api/test",
+      "dest": "/api/test.js"
     },
     {
       "src": "/assets/(.*)",
