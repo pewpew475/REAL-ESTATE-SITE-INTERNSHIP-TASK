@@ -33,7 +33,7 @@ module.exports = async (req, res) => {
         });
       }
 
-      // Parse the request body to get the file data
+      // Parse the request body to get the compressed file data
       let body = '';
       req.on('data', chunk => {
         body += chunk.toString();
@@ -44,7 +44,7 @@ module.exports = async (req, res) => {
         req.on('error', reject);
       });
 
-      // Try to parse as JSON first (in case frontend sends base64)
+      // Parse the JSON data
       let fileData;
       try {
         const parsed = JSON.parse(body);
@@ -52,12 +52,13 @@ module.exports = async (req, res) => {
           fileData = parsed;
         }
       } catch (e) {
-        // If not JSON, it might be multipart form data
-        // For now, let's handle the case where we get the file data
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid request data'
+        });
       }
 
       if (!fileData) {
-        // If we can't parse the file data, return an error
         return res.status(400).json({
           success: false,
           error: 'No file data received'
@@ -76,7 +77,7 @@ module.exports = async (req, res) => {
       // Generate unique filename
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 15);
-      const fileExtension = fileData.fileName.split('.').pop();
+      const fileExtension = fileData.fileName.split('.').pop() || 'jpg';
       const fileName = `property-${timestamp}-${randomString}.${fileExtension}`;
 
       // Convert base64 to buffer

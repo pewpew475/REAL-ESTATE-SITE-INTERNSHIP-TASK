@@ -25,7 +25,7 @@ const Index = () => {
   });
 
   const filteredProperties = useMemo(() => {
-    return properties.filter(property => {
+    const filtered = properties.filter(property => {
       const matchesSearch = !filters.searchQuery || 
         property.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
         property.location.toLowerCase().includes(filters.searchQuery.toLowerCase());
@@ -43,6 +43,11 @@ const Index = () => {
       
       return matchesSearch && matchesType && matchesLocation && matchesPrice && matchesBedrooms && matchesBathrooms;
     });
+    
+    console.log('Filtered properties:', filtered.length, 'out of', properties.length, 'total');
+    console.log('Current filters:', filters);
+    
+    return filtered;
   }, [properties, filters]);
 
   const handleSearch = (query: string, type: string, location: string) => {
@@ -59,13 +64,44 @@ const Index = () => {
     setIsDetailsModalOpen(true);
   };
 
-  const handleAddProperty = (newProperty: Omit<Property, 'id' | 'createdAt'>) => {
-    const property: Property = {
-      ...newProperty,
-      id: Math.random().toString(36).substr(2, 9),
-      createdAt: new Date(),
-    };
-    setProperties(prev => [property, ...prev]);
+  const handleAddProperty = async (newProperty: Omit<Property, 'id' | 'createdAt'>) => {
+    try {
+      // Create the property object
+      const property: Property = {
+        ...newProperty,
+        id: Math.random().toString(36).substr(2, 9),
+        createdAt: new Date(),
+      };
+      
+      // Add to local state immediately for better UX
+      setProperties(prev => {
+        const newProperties = [property, ...prev];
+        console.log('Properties updated:', newProperties.length, 'total properties');
+        console.log('New property added:', property);
+        return newProperties;
+      });
+      
+      // Also try to save to API (optional - for persistence)
+      try {
+        const response = await fetch('/api/properties', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(property),
+        });
+        
+        if (response.ok) {
+          console.log('Property saved to API successfully');
+        } else {
+          console.warn('Failed to save property to API, but it\'s still added locally');
+        }
+      } catch (apiError) {
+        console.warn('API save failed, but property is still added locally:', apiError);
+      }
+    } catch (error) {
+      console.error('Error adding property:', error);
+    }
   };
 
   return (

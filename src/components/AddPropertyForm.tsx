@@ -82,13 +82,43 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
     setIsUploading(true);
 
     try {
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onload = async (e) => {
+      // Compress the image to reduce file size
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = async () => {
         try {
-          const base64String = e.target?.result as string;
-          const base64Data = base64String.split(',')[1]; // Remove data:image/...;base64, prefix
-
+          // Calculate new dimensions (max 800px width, maintain aspect ratio)
+          const maxWidth = 800;
+          const maxHeight = 600;
+          let { width, height } = img;
+          
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+          if (height > maxHeight) {
+            width = (width * maxHeight) / height;
+            height = maxHeight;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Draw and compress
+          ctx?.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8); // 80% quality
+          
+          // Extract base64 data
+          const base64Data = compressedDataUrl.split(',')[1];
+          
+          // Check if compressed size is reasonable (under 3MB)
+          const sizeInBytes = (base64Data.length * 3) / 4;
+          if (sizeInBytes > 3 * 1024 * 1024) {
+            throw new Error('Image is still too large after compression');
+          }
+          
           // Send to API
           const response = await fetch('/api/upload', {
             method: 'POST',
@@ -98,7 +128,7 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
             body: JSON.stringify({
               file: base64Data,
               fileName: file.name,
-              fileType: file.type,
+              fileType: 'image/jpeg',
             }),
           });
 
@@ -117,7 +147,7 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
           console.error('Upload error:', error);
           toast({
             title: "Upload failed",
-            description: "Failed to upload image. Please try again.",
+            description: "Failed to upload image. Please try a smaller image.",
             variant: "destructive",
           });
         } finally {
@@ -128,23 +158,23 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
           }
         }
       };
-
-      reader.onerror = () => {
+      
+      img.onerror = () => {
         setIsUploading(false);
         toast({
           title: "Upload failed",
-          description: "Failed to read the file. Please try again.",
+          description: "Failed to process image. Please try again.",
           variant: "destructive",
         });
       };
-
-      reader.readAsDataURL(file);
+      
+      img.src = URL.createObjectURL(file);
     } catch (error) {
       console.error('Upload error:', error);
       setIsUploading(false);
       toast({
         title: "Upload failed",
-        description: "Failed to upload image. Please try again.",
+        description: "Failed to add image. Please try again.",
         variant: "destructive",
       });
       // Reset file input
@@ -200,6 +230,7 @@ export const AddPropertyForm = ({ isOpen, onClose, onSubmit }: AddPropertyFormPr
       petFriendly: formData.petFriendly,
     };
 
+    console.log('Submitting property:', property);
     onSubmit(property);
     
     // Reset form
