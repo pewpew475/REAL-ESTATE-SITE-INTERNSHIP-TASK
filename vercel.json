@@ -10,9 +10,6 @@
       "dest": "/index.html"
     }
   ],
-  "env": {
-    "BLOB_READ_WRITE_TOKEN": "@blob_read_write_token"
-  },
   "functions": {
     "api/**/*.ts": {
       "runtime": "nodejs18.x"
