@@ -1,4 +1,4 @@
-const { put } = require('@vercel/blob');
+import { put } from '@vercel/blob';
 
 export default async function handler(req, res) {
   // Handle CORS
@@ -24,7 +24,17 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
+      // Check if we have the BLOB_READ_WRITE_TOKEN
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        console.error('BLOB_READ_WRITE_TOKEN not found in environment variables');
+        return res.status(500).json({
+          success: false,
+          error: 'Blob storage not configured'
+        });
+      }
+
       // For now, let's create a mock response to test if the API is working
+      // TODO: Implement actual file upload when multipart form data is properly handled
       return res.json({
         success: true,
         data: {
@@ -33,7 +43,7 @@ export default async function handler(req, res) {
           size: 1024,
           type: 'image/jpeg'
         },
-        message: 'File uploaded successfully (mock)'
+        message: 'File uploaded successfully (mock - blob token configured)'
       });
     } catch (error) {
       console.error('Error uploading file:', error);
